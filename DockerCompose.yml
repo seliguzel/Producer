@@ -1,0 +1,80 @@
+version: '3'
+
+networks:
+  elk:
+  jaeger-example:
+
+volumes:
+  elasticsearch:
+    driver: local
+
+services:
+  elasticsearch:
+    environment:
+      http.host: 0.0.0.0
+      transport.host: 127.0.0.1
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.2.1
+    networks:
+      elk: null
+    ports:
+    - 9200:9200
+    restart: unless-stopped
+    volumes:
+    - elasticsearch:/usr/share/elasticsearch/data:rw
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash-oss:6.2.1
+    depends_on:
+    - elasticsearch
+    networks:
+      elk: null
+    ports:
+    - 5044:5044
+    restart: unless-stopped
+    volumes:
+    - ./etc/logstash/pipeline:/usr/share/logstash/pipeline:ro
+
+  kibana:
+    depends_on:
+    - elasticsearch
+    environment:
+      ELASTICSEARCH_PASSWORD: changeme
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: elastic
+    image: docker.elastic.co/kibana/kibana-oss:6.2.1
+    networks:
+      elk: null
+    ports:
+    - 5601:5601
+    restart: unless-stoppeds
+    
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "6831:6831/udp"
+      - "16686:16686"
+    networks:
+      - jaeger-example
+  hotrod:
+    image: jaegertracing/example-hotrod:latest
+    ports: 
+      - "8080:8080"
+    command: ["all"]
+    environment:
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+    networks:
+      - jaeger-example
+    depends_on:
+      - jaeger
+
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    hostname: "rabbit"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    labels:
+      NAME: "rabbitmq"
+    volumes:
+      - ./rabbitmq-isolated.conf:/etc/rabbitmq/rabbitmq.config
